@@ -1,11 +1,21 @@
 # Why This Project Matters (Business Value)
 
-In regulated industries like **healthcare, finance, and insurance**, storing credentials in plaintext or embedding them in configuration files violates security and compliance mandates such as **PCI-DSS, HIPAA, and NIST 800-53**.
+In regulated industries such as healthcare, finance, and insurance, storing credentials in plaintext or embedding them directly into configuration files violates established security and compliance frameworks including:
 
-This project demonstrates a **real-world scenario** where a cloud-hosted application (e.g., internal finance dashboard or patient portal) needs access to credentials — without compromising security.
+- PCI-DSS
+- HIPAA
+- NIST 800-53
+- ISO 27001
+- CIS Controls
 
-By combining **Terraform for automated infrastructure** and **Ansible for secure configuration**, this solution:
-- Prevents secret sprawl across environments
-- Centralizes credential access logging in **CloudTrail**
-- Maintains **auditability and least privilege**
-- Prepares your environment for **zero-trust adoption** and future compliance assessments
+This project demonstrates a real-world pattern for securely retrieving application secrets without exposing them to developers, configuration files, CI/CD logs, or server environments.
+
+By combining Terraform for automated infrastructure provisioning and Ansible for secure configuration, this solution:
+
+- Prevents secret sprawl across servers and environments
+- Ensures all secret access is logged in CloudTrail for auditability
+- Enforces IAM least privilege by scoping `GetSecretValue` to a single secret
+- Reduces operational risk and human error during deployment
+- Establishes a foundation for Zero Trust and compliance-aligned architectures
+
+This approach reflects how modern cloud-native applications securely consume credentials while meeting organizational security and regulatory requirements.
