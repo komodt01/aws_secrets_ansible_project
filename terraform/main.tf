@@ -32,15 +32,16 @@ resource "aws_route_table_association" "public_rt_assoc" {
 }
 
 resource "aws_security_group" "ec2_sg" {
-  name        = "allow_ssh"
-  description = "Allow SSH inbound traffic"
+  name        = "ansible-secrets-demo"
+  description = "Administrative access for the secrets-management demo"
   vpc_id      = aws_vpc.main_vpc.id
 
   ingress {
+    description = "SSH from approved administrative CIDR"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.admin_cidr]
   }
 
   egress {
@@ -53,25 +54,34 @@ resource "aws_security_group" "ec2_sg" {
 
 resource "aws_iam_role" "ec2_secrets_role" {
   name = "EC2SecretsManagerAccess"
+
   assume_role_policy = jsonencode({
-    Version = "2012-10-17",
+    Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow",
-      Principal = { Service = "ec2.amazonaws.com" },
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
       Action = "sts:AssumeRole"
     }]
   })
 }
 
+resource "aws_secretsmanager_secret" "ansible_secret" {
+  name        = "ansible-secret"
+  description = "Demo secret retrieved through identity-based authorization"
+}
+
 resource "aws_iam_policy" "secrets_access" {
   name        = "SecretsManagerRead"
-  description = "Allows read access to Secrets Manager"
+  description = "Allows read access to the project secret"
+
   policy = jsonencode({
-    Version = "2012-10-17",
+    Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow",
-      Action   = ["secretsmanager:GetSecretValue"],
-      Resource = "*"
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = aws_secretsmanager_secret.ansible_secret.arn
     }]
   })
 }
@@ -84,18 +94,6 @@ resource "aws_iam_role_policy_attachment" "attach_policy" {
 resource "aws_iam_instance_profile" "ec2_secrets_profile" {
   name = "EC2SecretsProfile"
   role = aws_iam_role.ec2_secrets_role.name
-}
-
-resource "aws_secretsmanager_secret" "ansible_secret" {
-  name = "ansible-secret"
-}
-
-resource "aws_secretsmanager_secret_version" "ansible_secret_version" {
-  secret_id     = aws_secretsmanager_secret.ansible_secret.id
-  secret_string = jsonencode({
-    APP_USER     = "ansibleuser",
-    APP_PASSWORD = "SuperSecureP@ssw0rd"
-  })
 }
 
 resource "aws_instance" "ansible_ec2" {
