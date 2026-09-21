@@ -1,96 +1,253 @@
-# Requirements – AWS Secrets Manager + Ansible Project
+# Requirements – AWS Secrets Manager + Ansible
 
 ## 1. Purpose
 
-This project demonstrates how to securely retrieve application secrets from **AWS Secrets Manager** using **Ansible**, with AWS infrastructure provisioned by **Terraform**.
+This project demonstrates a secure pattern for retrieving application secrets from AWS Secrets Manager using identity-based authorization rather than embedding credentials in application code, automation scripts, or infrastructure configuration.
 
-The goals are to:
-- Store a secret in AWS Secrets Manager.
-- Provision network and compute resources for a demo environment.
-- Retrieve the secret using an Ansible playbook and show it can be consumed securely.
+Terraform provisions the supporting AWS resources, while Ansible demonstrates authorized secret retrieval.
 
----
-
-## 2. Functional Requirements
-
-### 2.1 Secret Management
-
-- R1.1 – Create an AWS Secrets Manager secret (e.g., `ansible_secret`) containing a key/value payload.
-- R1.2 – Allow authorized workloads (Ansible or EC2 instance) to call `GetSecretValue` on this secret.
-- R1.3 – Demonstrate successful retrieval of the secret in an Ansible playbook.
-
-### 2.2 Infrastructure Provisioning (Terraform)
-
-- R2.1 – Provision a dedicated **VPC** (e.g., `10.0.0.0/16`).
-- R2.2 – Create a **public subnet** (e.g., `10.0.0.0/20`) and associate it with:
-  - Internet Gateway
-  - Route table with default route to the internet.
-- R2.3 – Create a **security group** that:
-  - Allows SSH (22) from an admin CIDR.
-  - Optionally allows HTTP/HTTPS if needed for testing.
-- R2.4 – Launch an **EC2 instance** (e.g., `t3.micro`) tagged as:
-  - `Project = "AWS Secrets Manager + Ansible"`
-  - `Environment = "Demo"`
-- R2.5 – Attach an **IAM instance profile/role** granting the instance access to `GetSecretValue` for the secret.
-
-### 2.3 Configuration Management (Ansible)
-
-- R3.1 – Define an inventory that targets `localhost` (or the Ansible control node).
-- R3.2 – Implement an Ansible playbook (`secrets_manager_retrieve.yml`) that:
-  - Uses the `amazon.aws.aws_secret` module to retrieve `ansible_secret` from Secrets Manager.
-  - Prints or logs the retrieved value to verify access.
-- R3.3 – (Optional) Extend the playbook to configure the EC2 instance using SSH:
-  - Install packages.
-  - Write the secret value into a configuration file or environment variable.
+This is a lab implementation intended to explore the security architecture pattern rather than represent a production deployment.
 
 ---
 
-## 3. Non-Functional Requirements
+## 2. Security Objective
 
-### 3.1 Security
+The primary security objective is:
 
-- N1.1 – Use IAM **least privilege** for the Secrets Manager access policy:
-  - Allow `secretsmanager:GetSecretValue` only on the specific secret ARN.
-- N1.2 – Ensure the secret is encrypted with the default AWS-managed KMS key or a customer-managed key.
-- N1.3 – Do not hard-code secret values in Terraform, Ansible, or source code; only references/ARNs.
-- N1.4 – Limit SSH access to a known admin CIDR.
+> Applications and automation should retrieve secrets through an authorized identity without storing or exposing the secret unnecessarily.
 
-### 3.2 Observability
+The design should address:
 
-- N2.1 – Enable CloudTrail in the account (or rely on existing) so all Secrets Manager and IAM calls are logged.
-- N2.2 – Optionally send EC2 system logs to CloudWatch Logs.
-
-### 3.3 Maintainability
-
-- N3.1 – Use Terraform for all infrastructure provisioning and destruction.
-- N3.2 – Keep playbooks idempotent where possible.
-- N3.3 – Document all prerequisites (AWS CLI, Terraform, Ansible, Python libraries) in `README.md`.
+- Where secret material is stored
+- Which identity can retrieve it
+- What permissions that identity receives
+- How administrative access is restricted
+- How secret values are protected during retrieval
+- How access can be audited
+- What additional controls would be required for production
 
 ---
 
-## 4. Tooling & Environment Requirements
+## 3. Functional Requirements
 
-- T1 – Terraform 1.x or later.
-- T2 – Ansible 2.13+ with the `amazon.aws` collection installed.
-- T3 – AWS CLI configured with credentials that can:
-  - Create VPC, subnet, IGW, route tables.
-  - Create security groups, EC2 instances, IAM roles, and instance profiles.
-  - Create and manage a Secrets Manager secret.
-- T4 – Ansible control node (local machine, WSL, or EC2) with network access to AWS APIs.
+### 3.1 Secret Management
+
+- R1.1 – Create a dedicated AWS Secrets Manager secret.
+- R1.2 – Keep the secret value outside Terraform configuration and source control.
+- R1.3 – Allow an authorized identity to retrieve the secret.
+- R1.4 – Demonstrate successful secret retrieval through Ansible.
+- R1.5 – Do not display the retrieved secret value during normal automation output.
+
+### 3.2 Infrastructure Provisioning
+
+Terraform should provision the supporting demonstration environment:
+
+- Dedicated VPC
+- Public subnet
+- Internet Gateway
+- Route table
+- Security group
+- EC2 instance
+- IAM role
+- IAM instance profile
+- Secrets Manager secret
+
+The EC2 instance is included to demonstrate workload identity and role-based access to the secret.
+
+### 3.3 Identity and Access
+
+The workload identity should:
+
+- Use an IAM role rather than embedded AWS credentials.
+- Receive only the Secrets Manager action required by the demonstration.
+- Be authorized only for the project secret.
+- Avoid broad access to unrelated secrets.
+
+The implemented permission is:
+
+`secretsmanager:GetSecretValue`
+
+scoped to the ARN of the secret created by the project.
+
+### 3.4 Administrative Access
+
+SSH access to the demonstration instance must be restricted to an explicitly supplied administrative CIDR.
+
+The configuration must not default to unrestricted inbound SSH from the internet.
+
+### 3.5 Ansible Secret Retrieval
+
+The Ansible playbook should:
+
+- Retrieve the project secret from AWS Secrets Manager.
+- Use an authorized AWS identity.
+- Prevent the retrieved value from being exposed through normal Ansible task output.
+- Confirm successful retrieval without printing the secret itself.
 
 ---
 
-## 5. Assumptions
+## 4. Security Requirements
 
-- A1 – This is a **demo / lab** project, not production.
-- A2 – The same AWS account is used for Terraform, Ansible, and Secrets Manager.
-- A3 – The user has permissions to create and delete all resources.
+### 4.1 Secret Handling
+
+Secret values must not be committed to source control.
+
+Terraform should create the secret resource but should not manage the secret value in this repository.
+
+The secret value should be populated separately through an authorized secret-entry process.
+
+This prevents secret material from being embedded in Terraform configuration and avoids intentionally placing the value in Terraform state.
+
+### 4.2 Least Privilege
+
+Secret retrieval permissions must be limited to:
+
+- The required action
+- The intended secret
+- The identity that requires access
+
+Access to all secrets in the account is not required for this demonstration.
+
+### 4.3 Secret Exposure
+
+Retrieving a secret securely does not guarantee that the secret remains protected after retrieval.
+
+Automation must avoid exposing secret values through:
+
+- Console output
+- Automation logs
+- Debug output
+- Source control
+- Infrastructure configuration
+- Unprotected files
+
+### 4.4 Network Access
+
+Administrative network access must be explicitly restricted.
+
+The lab uses a public subnet for simplicity, but public reachability does not justify unrestricted administrative access.
+
+### 4.5 Auditability
+
+Secret access should be auditable through AWS account logging.
+
+A production implementation should ensure that secret retrieval and relevant identity activity are captured by the organization's centralized security logging and monitoring capabilities.
 
 ---
 
-## 6. Out of Scope
+## 5. Trust Boundaries
 
-- O1 – High availability or auto-scaling of the EC2 instance.
-- O2 – Advanced secret rotation workflows.
-- O3 – CI/CD integration for playbook or Terraform execution.
-- O4 – Multi-account or cross-region secret replication.
+The architecture includes several important trust boundaries.
+
+### Administrator to AWS
+
+The administrator or automation identity provisioning infrastructure has elevated permissions and must be protected separately from the workload identity.
+
+### Workload to Secrets Manager
+
+The workload identity is authorized to retrieve only the secret required for its function.
+
+### Ansible Control Node to AWS
+
+When the playbook runs from a local control node, secret retrieval occurs using the AWS identity available to that control node.
+
+That identity is distinct from the EC2 instance role unless the playbook is executed from the instance itself.
+
+### Secret Retrieval to Secret Consumption
+
+Once retrieved, the secret temporarily exists within the consuming process.
+
+Protecting the secret after retrieval is therefore part of the security boundary.
+
+---
+
+## 6. Control Failure Considerations
+
+A production architecture should consider what happens if:
+
+- The workload role receives excessive permissions.
+- Administrative network access becomes overly broad.
+- A secret value is exposed through logs or debug output.
+- Credentials on the Ansible control node are compromised.
+- The secret is retrieved by an unexpected identity.
+- Audit logging is unavailable.
+- The secret is not rotated when required.
+- Access remains after the workload no longer requires it.
+
+These conditions require monitoring, ownership, and defined response procedures beyond the scope of this lab.
+
+---
+
+## 7. Production Considerations
+
+This lab intentionally uses a simplified environment.
+
+A production design should evaluate:
+
+- Private workload placement
+- Alternatives to direct SSH administration
+- Centralized identity and access governance
+- Customer-managed encryption keys when required
+- Secret rotation
+- Secret lifecycle management
+- Access reviews
+- Centralized audit logging
+- Detection of unusual secret access
+- Network controls for access to AWS services
+- Multi-account architecture
+- Separation of administrative and workload identities
+- Incident response for suspected secret compromise
+
+These are architecture decisions based on business requirements, threat models, compliance obligations, and operational constraints.
+
+---
+
+## 8. Tooling
+
+The demonstration uses:
+
+- Terraform for infrastructure provisioning
+- AWS Secrets Manager for managed secret storage
+- AWS IAM for identity-based authorization
+- Amazon EC2 for the demonstration workload
+- Ansible for secret retrieval
+- AWS account credentials for local administrative or control-node operations
+
+---
+
+## 9. Assumptions
+
+- This repository represents a lab environment.
+- The AWS account used for the lab permits creation and deletion of the required resources.
+- An authorized administrator populates the secret value separately after infrastructure deployment.
+- AWS account-level audit logging is available or would be required in a production environment.
+- The EC2 instance and local Ansible control node represent different identity contexts.
+
+---
+
+## 10. Out of Scope
+
+The current implementation does not demonstrate:
+
+- Automated secret rotation
+- Multi-account secret sharing
+- Cross-region replication
+- Production high availability
+- CI/CD integration
+- Centralized security monitoring
+- Automated access reviews
+- Production incident-response workflows
+
+These capabilities would require additional architecture and governance beyond the scope of the lab.
+
+---
+
+## Architecture Requirement
+
+The central requirement of this project is not simply:
+
+> "Store a password in a secrets service."
+
+It is:
+
+> **Keep secret material out of application and infrastructure code, authorize retrieval through identity, minimize access, and protect the secret throughout its lifecycle.**
