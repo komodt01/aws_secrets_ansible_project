@@ -1,57 +1,108 @@
-# Networking Overview for AWS Secrets Manager + Ansible Project
+# Networking – AWS Secrets Manager + Ansible
 
-## Purpose of Networking Components
+## Purpose
 
-This project deploys an EC2 instance in a **public subnet** to allow direct SSH access and enable Ansible automation. The networking setup is intentionally simple and cost-efficient while adhering to real-world security best practices.
+The networking in this project supports a simplified lab environment for demonstrating secrets management, identity-based access, and administrative connectivity.
 
----
-
-## Key Components
-
-### ✅ VPC (Virtual Private Cloud)
-A logically isolated network environment for your AWS resources.
-
-### ✅ Subnet
-- **Type**: Public
-- **Purpose**: Hosts the EC2 instance with direct internet access
-
-### ✅ Internet Gateway (IGW)
-- **Purpose**: Allows the EC2 instance to communicate with the internet
-- **Why it matters**: Without an IGW, resources in your VPC cannot send or receive traffic from the internet.
-
-### ✅ Route Table
-- **Configured Route**: `0.0.0.0/0` → IGW
-- **Associated With**: The public subnet
-- **Why it matters**: Ensures outbound and inbound traffic can be routed through the Internet Gateway
-
-### ✅ Public IP Assignment
-- **EC2 Setting**: `associate_public_ip_address = true`
-- **Why it matters**: Required for Ansible and SSH access from your local or admin machine
-
-### ❌ NAT Gateway
-- **Not required**
-- Only needed when EC2 instances are in private subnets and must reach the internet without being reachable from it
+The implemented environment uses a public subnet and a publicly addressed EC2 instance. This design keeps the lab simple, but it also creates an administrative exposure that would require additional consideration in a production architecture.
 
 ---
 
-## Visual Summary
+## Implemented Network Architecture
 
-```
-[ Internet ] 
-     |
-[ Internet Gateway ]
-     |
-[ Route Table: 0.0.0.0/0 → IGW ]
-     |
-[ Public Subnet ]
-     |
-[ EC2 Instance (Public IP) ]
-```
+Terraform provisions:
+
+- A dedicated VPC using `10.0.0.0/16`
+- A public subnet using `10.0.0.0/20`
+- An Internet Gateway
+- A route table with a default route to the Internet Gateway
+- A security group
+- A public IP address for the EC2 instance
+
+The security group permits inbound SSH only from the explicitly supplied `admin_cidr`.
+
+It does not default to unrestricted SSH access from the internet.
 
 ---
 
-## Why This Design?
+## Administrative Access Boundary
 
-- ✅ Simple and cost-effective
-- ✅ Enables remote Ansible configuration without a bastion
-- ✅ Follows AWS security best practices for public-facing management
+The public EC2 instance creates an administrative trust boundary between the internet-facing network path and the workload.
+
+For the lab, this risk is reduced by restricting SSH access to an approved administrative CIDR.
+
+This demonstrates an important security principle:
+
+> Public reachability and administrative authorization are separate decisions.
+
+A resource may require network connectivity without requiring administrative access from every network location.
+
+---
+
+## Security Tradeoff
+
+Using a public subnet simplifies the demonstration and avoids additional infrastructure.
+
+The tradeoff is increased exposure of the workload's network interface to an internet-routable environment.
+
+The lab therefore accepts a simplified network architecture while applying a restrictive inbound access rule.
+
+This is a lab design decision rather than a recommendation for production administrative access.
+
+---
+
+## Relationship to Secrets Management
+
+Network controls and secrets-management controls address different risks.
+
+The network restricts where administrative connections may originate.
+
+Identity controls determine which AWS identity may retrieve the secret.
+
+Secrets Manager protects centralized secret storage.
+
+These controls complement one another but should not be treated as interchangeable.
+
+Restricting SSH does not replace least-privilege secret access, and least-privilege secret access does not eliminate the need to protect administrative paths.
+
+---
+
+## Production Architecture Considerations
+
+A production design should evaluate whether the workload requires:
+
+- A public IP address
+- Direct inbound SSH
+- Internet-routable administrative access
+
+Where those requirements do not exist, a stronger design could place the workload in a private subnet and use a managed administrative access mechanism rather than exposing SSH directly.
+
+Production architecture should also evaluate:
+
+- Private connectivity to required AWS services
+- Centralized administrative access
+- Network segmentation
+- Egress restrictions
+- Security monitoring
+- Access logging
+- Separation between management and workload traffic
+
+The appropriate design depends on operational requirements, threat models, and organizational security standards.
+
+---
+
+## Architecture Decision
+
+For this lab:
+
+**Public subnet + restricted administrative CIDR**
+
+was selected for simplicity and demonstrability.
+
+For production:
+
+**Private workload placement + controlled management access**
+
+would generally be evaluated before allowing direct public administrative connectivity.
+
+The important architectural principle is that convenience, cost, and security exposure should be treated as an explicit tradeoff rather than assuming that a working network configuration is automatically an appropriate production security design.
