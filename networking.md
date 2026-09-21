@@ -2,9 +2,11 @@
 
 ## Purpose
 
-The networking in this project supports a simplified lab environment for demonstrating secrets management, identity-based access, and administrative connectivity.
+The networking architecture supports the project's secrets-management and identity-based access design.
 
-The implemented environment uses a public subnet and a publicly addressed EC2 instance. This design keeps the lab simple, but it also creates an administrative exposure that would require additional consideration in a production architecture.
+The implemented environment uses a public subnet and a publicly addressed EC2 instance to provide a straightforward administrative path for the demonstration. This design also introduces network exposure that must be explicitly considered from a security architecture perspective.
+
+The objective is to demonstrate not only how connectivity works, but also how administrative access, workload identity, and network exposure affect the overall security boundary.
 
 ---
 
@@ -21,33 +23,33 @@ Terraform provisions:
 
 The security group permits inbound SSH only from the explicitly supplied `admin_cidr`.
 
-It does not default to unrestricted SSH access from the internet.
+The configuration does not default to unrestricted SSH access from the internet.
 
 ---
 
 ## Administrative Access Boundary
 
-The public EC2 instance creates an administrative trust boundary between the internet-facing network path and the workload.
+The EC2 instance is publicly reachable, which creates an administrative trust boundary between the internet-facing network path and the workload.
 
-For the lab, this risk is reduced by restricting SSH access to an approved administrative CIDR.
+Administrative access is restricted to an explicitly approved source CIDR rather than allowing SSH from any internet address.
 
 This demonstrates an important security principle:
 
-> Public reachability and administrative authorization are separate decisions.
+> **Public network reachability and administrative authorization are separate architecture decisions.**
 
-A resource may require network connectivity without requiring administrative access from every network location.
+A workload may require network connectivity without requiring administrative access from every network location.
 
 ---
 
 ## Security Tradeoff
 
-Using a public subnet simplifies the demonstration and avoids additional infrastructure.
+The public-subnet design provides a simple way to demonstrate connectivity and administrative access.
 
-The tradeoff is increased exposure of the workload's network interface to an internet-routable environment.
+The tradeoff is increased exposure of the workload's network interface.
 
-The lab therefore accepts a simplified network architecture while applying a restrictive inbound access rule.
+Restricting SSH to an approved administrative CIDR reduces that exposure, but it does not eliminate the risks associated with a publicly reachable management interface.
 
-This is a lab design decision rather than a recommendation for production administrative access.
+This is an intentional implementation tradeoff rather than an assumption that public administrative access represents the preferred production architecture.
 
 ---
 
@@ -55,54 +57,72 @@ This is a lab design decision rather than a recommendation for production admini
 
 Network controls and secrets-management controls address different risks.
 
-The network restricts where administrative connections may originate.
+The network controls where administrative connections may originate.
 
-Identity controls determine which AWS identity may retrieve the secret.
+Identity controls determine which AWS identity is authorized to retrieve the secret.
 
-Secrets Manager protects centralized secret storage.
+Secrets Manager provides centralized storage for the secret.
 
-These controls complement one another but should not be treated as interchangeable.
+These controls operate together but are not interchangeable.
 
-Restricting SSH does not replace least-privilege secret access, and least-privilege secret access does not eliminate the need to protect administrative paths.
+Restricting SSH does not replace least-privilege authorization for secret retrieval, and least-privilege authorization does not eliminate the need to protect administrative access paths.
+
+---
+
+## Trust Boundaries
+
+The implemented architecture contains several relevant trust boundaries:
+
+- Administrator to public EC2 management interface
+- EC2 workload to AWS services
+- Workload identity to Secrets Manager
+- Local Ansible control node to AWS
+- Internet-facing network path to the project VPC
+
+Each boundary requires a different type of control.
+
+Network filtering protects the administrative path, while identity-based authorization controls access to the secret.
 
 ---
 
 ## Production Architecture Considerations
 
-A production design should evaluate whether the workload requires:
+Before approving this pattern for production, an architecture review should determine whether the workload actually requires:
 
 - A public IP address
 - Direct inbound SSH
 - Internet-routable administrative access
 
-Where those requirements do not exist, a stronger design could place the workload in a private subnet and use a managed administrative access mechanism rather than exposing SSH directly.
+Where those requirements do not exist, the architecture should evaluate private workload placement and managed administrative access that avoids exposing SSH directly to the internet.
 
-Production architecture should also evaluate:
+Additional production considerations include:
 
 - Private connectivity to required AWS services
-- Centralized administrative access
 - Network segmentation
-- Egress restrictions
+- Restrictive outbound access
+- Centralized administrative access
 - Security monitoring
-- Access logging
-- Separation between management and workload traffic
+- Administrative access logging
+- Separation of management and workload traffic
 
-The appropriate design depends on operational requirements, threat models, and organizational security standards.
+The appropriate controls depend on workload criticality, threat model, operational requirements, and organizational security standards.
 
 ---
 
 ## Architecture Decision
 
-For this lab:
+For the implemented project:
 
-**Public subnet + restricted administrative CIDR**
+**Public subnet + public EC2 address + restricted administrative CIDR**
 
-was selected for simplicity and demonstrability.
+provides a straightforward environment for demonstrating the security pattern while limiting administrative access to an explicitly approved source.
 
-For production:
+For a production implementation:
 
 **Private workload placement + controlled management access**
 
-would generally be evaluated before allowing direct public administrative connectivity.
+should be evaluated before approving direct public administrative connectivity.
 
-The important architectural principle is that convenience, cost, and security exposure should be treated as an explicit tradeoff rather than assuming that a working network configuration is automatically an appropriate production security design.
+The architectural principle is:
+
+> **Connectivity should be granted because the workload requires it, not simply because it is the easiest path to implementation.**
